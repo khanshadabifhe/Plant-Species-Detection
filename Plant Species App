@@ -1,0 +1,180 @@
+
+import streamlit as st
+import requests
+from PIL import Image
+
+st.set_page_config(
+    page_title="Plant Species Detection",
+    page_icon="🌿",
+    layout="wide"
+)
+
+API_URL = "http://127.0.0.1:8000/predict"
+
+# Custom styling
+st.markdown("""
+<style>
+.main-title {
+    font-size: 2.8rem;
+    font-weight: 800;
+    text-align: center;
+    color: #216e46;
+    margin-bottom: 0.2rem;
+}
+.subtitle {
+    text-align: center;
+    color: #64748b;
+    font-size: 1.1rem;
+}
+.hero {
+    background: linear-gradient(120deg, #e8f8ee, #f3f9e9);
+    padding: 25px;
+    border-radius: 18px;
+    border-left: 6px solid #2e8b57;
+    margin: 20px 0;
+}
+.result-card {
+    background: #f0fdf4;
+    padding: 22px;
+    border-radius: 16px;
+    border: 1px solid #bbf7d0;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown(
+    '<div class="main-title">🌿 Plant Species Detection</div>',
+    unsafe_allow_html=True
+)
+st.markdown(
+    '<div class="subtitle">Discover the plant world with artificial intelligence</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown("""
+<div class="hero">
+    <h3>🌱 Every plant has a story. Let AI help you discover it.</h3>
+    <p>
+        Upload a plant photograph to identify its species in seconds.
+        Explore the model's top three predictions and their confidence scores,
+        powered by deep learning with MobileNetV2.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("### 📸 Upload your plant image")
+
+uploaded_file = st.file_uploader(
+    "Choose a JPG, JPEG, or PNG image",
+    type=["jpg", "jpeg", "png"]
+)
+
+if uploaded_file:
+    left, right = st.columns([1, 1.2], gap="large")
+
+    with left:
+        image = Image.open(uploaded_file).convert("RGB")
+        st.image(
+            image,
+            caption="Your uploaded plant",
+            use_container_width=True
+        )
+
+        st.caption("Tip: Use a clear image with the plant visible.")
+
+    with right:
+        st.markdown("### 🔍 Ready to identify your plant?")
+        st.write(
+            "Select the button below to analyze your image "
+            "and compare the model's three strongest predictions."
+        )
+
+        if st.button("🌿 Identify Plant", type="primary",
+                     use_container_width=True):
+            try:
+                with st.spinner("Analyzing your image..."):
+                    uploaded_file.seek(0)
+                    response = requests.post(
+                        API_URL,
+                        files={
+                            "file": (
+                                uploaded_file.name,
+                                uploaded_file.getvalue(),
+                                uploaded_file.type
+                            )
+                        },
+                        timeout=90
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+
+                plant = result["predicted_plant"]
+                confidence = float(result["confidence"])
+                top3 = result.get("top_3_predictions", [])
+
+                st.success("Analysis complete!")
+
+                st.markdown(
+                    f'<div class="result-card">'
+                    f'<h3>🌱 Most Likely Species</h3>'
+                    f'<h2>{plant.replace("_", " ").title()}</h2>'
+                    f'<p>Model confidence: <b>{confidence:.2f}%</b></p>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+                st.progress(
+                    max(0.0, min(1.0, confidence / 100))
+                )
+
+                if top3:
+                    st.markdown("### 🏆 Top 3 Predictions")
+                    st.caption(
+                        "Ranked by the model's predicted probability."
+                    )
+
+                    medals = ["🥇", "🥈", "🥉"]
+
+                    for rank, item in enumerate(top3[:3]):
+                        name = item["plant"].replace("_", " ").title()
+                        score = float(item["confidence"])
+
+                        st.markdown(
+                            f"**{medals[rank]} {rank + 1}. {name}**"
+                            f" — {score:.2f}%"
+                        )
+                        st.progress(
+                            max(0.0, min(1.0, score / 100))
+                        )
+
+                else:
+                    st.warning(
+                        "The API returned a prediction but no top-three list. "
+                        "Please check that the updated FastAPI backend is running."
+                    )
+
+                st.info(
+                    "Confidence is the model's predicted probability, "
+                    "not a guarantee of correctness."
+                )
+
+            except requests.RequestException as error:
+                st.error(
+                    "Could not reach the prediction API. "
+                    "Check that FastAPI is running on port 8000."
+                )
+                st.caption(str(error))
+
+            except Exception as error:
+                st.error(f"Prediction could not be displayed: {error}")
+
+else:
+    st.info(
+        "👆 Start by uploading a plant photograph to discover its likely species."
+    )
+
+st.divider()
+st.markdown(
+    "<center>🌿 Plant Species Detection | Deep Learning with MobileNetV2</center>",
+    unsafe_allow_html=True
+)
