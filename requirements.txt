@@ -1,5 +1,8 @@
+fastapi
+uvicorn
 streamlit
 requests
 Pillow
 numpy
 tensorflow
+huggingface_hub
