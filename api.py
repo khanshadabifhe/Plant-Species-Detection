@@ -1,16 +1,26 @@
-
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from PIL import Image
+import os
+import io
 import numpy as np
 import tensorflow as tf
+
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from PIL import Image, UnidentifiedImageError
+from huggingface_hub import hf_hub_download
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 app = FastAPI(title="Plant Species Detection API")
 
-model = tf.keras.models.load_model(
-    "/content/drive/MyDrive/CP-1/improved_plant_model.keras"
+# Download the trained model from Hugging Face
+MODEL_PATH = hf_hub_download(
+    repo_id="khanshadabifhe/plant-species-detection-model",
+    filename="improved_plant_model.keras",
+    repo_type="model"
 )
 
+# Load the trained model
+model = tf.keras.models.load_model(MODEL_PATH)
+
+# The 30 classes used during training
 class_names = [
     "aloevera", "banana", "bilimbi", "cantaloupe", "cassava",
     "coconut", "corn", "cucumber", "curcuma", "eggplant",
@@ -20,26 +30,36 @@ class_names = [
     "spinach", "sweetpotatoes", "tobacco", "waterapple", "watermelon"
 ]
 
+
 @app.get("/")
 def home():
-    return {"message": "Plant Species Detection API is running"}
+    return {
+        "message": "Plant Species Detection API is running"
+    }
+
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    import io
-    from PIL import UnidentifiedImageError
-
     try:
         raw_bytes = await file.read()
+
         if not raw_bytes:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded file is empty."
+            )
 
         try:
             image = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
         except (UnidentifiedImageError, OSError, ValueError):
             raise HTTPException(
                 status_code=400,
-                detail="Invalid image. Please upload a JPG, JPEG, or PNG image."
+                detail="Invalid image. Please upload a JPG, JPEG, or PNG."
             )
 
         image = image.resize((224, 224))
@@ -59,21 +79,22 @@ async def predict(file: UploadFile = File(...)):
         ]
 
         confidence = top_predictions[0]["confidence"]
-        low_confidence = confidence < 50.0
 
         return {
             "predicted_plant": top_predictions[0]["plant"],
             "confidence": confidence,
             "top_3_predictions": top_predictions,
-            "low_confidence_warning": low_confidence,
+            "low_confidence_warning": confidence < 50.0,
             "message": (
-                "Low confidence: please upload a clearer image of a supported plant."
-                if low_confidence
+                "Low confidence: upload a clearer image of a supported plant."
+                if confidence < 50.0
                 else "Prediction completed."
             )
         }
+
     except HTTPException:
         raise
+
     except Exception:
         raise HTTPException(
             status_code=500,
